@@ -13,7 +13,7 @@
  * of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
-#define pr_fmt(fmt) "[bq27z561] %s: " fmt, __func__
+#define pr_fmt(fmt)    "[bq27z561] %s: " fmt, __func__
 #include <linux/module.h>
 #include <linux/param.h>
 #include <linux/jiffies.h>
@@ -31,98 +31,108 @@
 #include <linux/ktime.h>
 
 enum print_reason {
-	PR_INTERRUPT = BIT(0),
-	PR_REGISTER = BIT(1),
-	PR_OEM = BIT(2),
-	PR_DEBUG = BIT(3),
+	PR_INTERRUPT    = BIT(0),
+	PR_REGISTER     = BIT(1),
+	PR_OEM		= BIT(2),
+	PR_DEBUG	= BIT(3),
 };
 
 static int debug_mask = PR_OEM;
-module_param_named(debug_mask, debug_mask, int, 0600);
+module_param_named(
+	debug_mask, debug_mask, int, 0600
+);
 
-#define INVALID_REG_ADDR 0xFF
+#define	INVALID_REG_ADDR	0xFF
 
-#define FG_FLAGS_FD BIT(4)
-#define FG_FLAGS_FC BIT(5)
-#define FG_FLAGS_DSG BIT(6)
-#define FG_FLAGS_RCA BIT(9)
-#define FG_FLAGS_FASTCHAGE BIT(5)
+#define FG_FLAGS_FD				BIT(4)
+#define	FG_FLAGS_FC				BIT(5)
+#define	FG_FLAGS_DSG				BIT(6)
+#define FG_FLAGS_RCA				BIT(9)
+#define FG_FLAGS_FASTCHAGE			BIT(5)
 
 #define BATTERY_DIGEST_LEN 32
 
-#define DEFUALT_FULL_DESIGN 100000
+#define DEFUALT_FULL_DESIGN		100000
 
-#define BQ_REPORT_FULL_SOC 9800
-#define BQ_CHARGE_FULL_SOC 9750
-#define BQ_RECHARGE_SOC 9900
+#define BQ_REPORT_FULL_SOC	9800
+#define BQ_CHARGE_FULL_SOC	9750
+#define BQ_RECHARGE_SOC		9900
 
-#define PD_CHG_UPDATE_DELAY_US 20 /*20 sec*/
+/* 低电保护阈值 */
+#define FG_SHUTDOWN_VOLT_MV	3400	/* 3.4V 才允许真正掉到 0% */
+#define FG_MIN_SOC_REPORT	15	/* 电压高于 3.4V 时最低显示 15% */
+#define FG_LOW_VOLT_HYST_MV	100	/* 100mV 迟滞，防止电压抖动 */
+
+#define PD_CHG_UPDATE_DELAY_US	20	/*20 sec*/
 
 enum bq_fg_reg_idx {
 	BQ_FG_REG_CTRL = 0,
-	BQ_FG_REG_TEMP, /* Battery Temperature */
-	BQ_FG_REG_VOLT, /* Battery Voltage */
-	BQ_FG_REG_CN, /* Current Now */
-	BQ_FG_REG_AI, /* Average Current */
-	BQ_FG_REG_BATT_STATUS, /* BatteryStatus */
-	BQ_FG_REG_TTE, /* Time to Empty */
-	BQ_FG_REG_TTF, /* Time to Full */
-	BQ_FG_REG_FCC, /* Full Charge Capacity */
-	BQ_FG_REG_RM, /* Remaining Capacity */
-	BQ_FG_REG_CC, /* Cycle Count */
-	BQ_FG_REG_SOC, /* Relative State of Charge */
-	BQ_FG_REG_SOH, /* State of Health */
-	BQ_FG_REG_CHG_VOL, /* Charging Voltage*/
-	BQ_FG_REG_CHG_CUR, /* Charging Current*/
-	BQ_FG_REG_DC, /* Design Capacity */
-	BQ_FG_REG_ALT_MAC, /* AltManufactureAccess*/
-	BQ_FG_REG_MAC_DATA, /* MACData*/
-	BQ_FG_REG_MAC_CHKSUM, /* MACChecksum */
-	BQ_FG_REG_MAC_DATA_LEN, /* MACDataLen */
+	BQ_FG_REG_TEMP,		/* Battery Temperature */
+	BQ_FG_REG_VOLT,		/* Battery Voltage */
+	BQ_FG_REG_CN,		/* Current Now */
+	BQ_FG_REG_AI,		/* Average Current */
+	BQ_FG_REG_BATT_STATUS,	/* BatteryStatus */
+	BQ_FG_REG_TTE,		/* Time to Empty */
+	BQ_FG_REG_TTF,		/* Time to Full */
+	BQ_FG_REG_FCC,		/* Full Charge Capacity */
+	BQ_FG_REG_RM,		/* Remaining Capacity */
+	BQ_FG_REG_CC,		/* Cycle Count */
+	BQ_FG_REG_SOC,		/* Relative State of Charge */
+	BQ_FG_REG_SOH,		/* State of Health */
+	BQ_FG_REG_CHG_VOL,	/* Charging Voltage*/
+	BQ_FG_REG_CHG_CUR,	/* Charging Current*/
+	BQ_FG_REG_DC,		/* Design Capacity */
+	BQ_FG_REG_ALT_MAC,	/* AltManufactureAccess*/
+	BQ_FG_REG_MAC_DATA,	/* MACData*/
+	BQ_FG_REG_MAC_CHKSUM,	/* MACChecksum */
+	BQ_FG_REG_MAC_DATA_LEN,	/* MACDataLen */
 	NUM_REGS,
 };
 
 static u8 bq27z561_regs[NUM_REGS] = {
-	0x00, /* CONTROL */
-	0x06, /* TEMP */
-	0x08, /* VOLT */
-	0x0C, /* CURRENT NOW */
-	0x14, /* AVG CURRENT */
-	0x0A, /* FLAGS */
-	0x16, /* Time to empty */
-	0x18, /* Time to full */
-	0x12, /* Full charge capacity */
-	0x10, /* Remaining Capacity */
-	0x2A, /* CycleCount */
-	0x2C, /* State of Charge */
-	0x2E, /* State of Health */
-	0x30, /* Charging Voltage*/
-	0x32, /* Charging Current*/
-	0x3C, /* Design Capacity */
-	0x3E, /* AltManufacturerAccess*/
-	0x40, /* MACData*/
-	0x60, /* MACChecksum */
-	0x61, /* MACDataLen */
+	0x00,	/* CONTROL */
+	0x06,	/* TEMP */
+	0x08,	/* VOLT */
+	0x0C,	/* CURRENT NOW */
+	0x14,	/* AVG CURRENT */
+	0x0A,	/* FLAGS */
+	0x16,	/* Time to empty */
+	0x18,	/* Time to full */
+	0x12,	/* Full charge capacity */
+	0x10,	/* Remaining Capacity */
+	0x2A,	/* CycleCount */
+	0x2C,	/* State of Charge */
+	0x2E,	/* State of Health */
+	0x30,	/* Charging Voltage*/
+	0x32,	/* Charging Current*/
+	0x3C,	/* Design Capacity */
+	0x3E,	/* AltManufacturerAccess*/
+	0x40,	/* MACData*/
+	0x60,	/* MACChecksum */
+	0x61,	/* MACDataLen */
 };
 
+
+
 enum bq_fg_mac_cmd {
-	FG_MAC_CMD_CTRL_STATUS = 0x0000,
-	FG_MAC_CMD_DEV_TYPE = 0x0001,
-	FG_MAC_CMD_FW_VER = 0x0002,
-	FG_MAC_CMD_HW_VER = 0x0003,
-	FG_MAC_CMD_IF_SIG = 0x0004,
-	FG_MAC_CMD_CHEM_ID = 0x0006,
-	FG_MAC_CMD_GAUGING = 0x0021,
-	FG_MAC_CMD_SEAL = 0x0030,
+	FG_MAC_CMD_CTRL_STATUS	= 0x0000,
+	FG_MAC_CMD_DEV_TYPE	= 0x0001,
+	FG_MAC_CMD_FW_VER	= 0x0002,
+	FG_MAC_CMD_HW_VER	= 0x0003,
+	FG_MAC_CMD_IF_SIG	= 0x0004,
+	FG_MAC_CMD_CHEM_ID	= 0x0006,
+	FG_MAC_CMD_GAUGING	= 0x0021,
+	FG_MAC_CMD_SEAL		= 0x0030,
 	FG_MAC_CMD_FASTCHARGE_EN = 0x003E,
 	FG_MAC_CMD_FASTCHARGE_DIS = 0x003F,
-	FG_MAC_CMD_DEV_RESET = 0x0041,
-	FG_MAC_CMD_MANU_NAME = 0x004C,
+	FG_MAC_CMD_DEV_RESET	= 0x0041,
+	FG_MAC_CMD_MANU_NAME	= 0x004C,
 	FG_MAC_CMD_CHARGING_STATUS = 0x0055,
-	FG_MAC_CMD_ITSTATUS1 = 0x0073,
-	FG_MAC_CMD_QMAX = 0x0075,
-	FG_MAC_CMD_RA_TABLE = 0x40C0,
+	FG_MAC_CMD_ITSTATUS1	= 0x0073,
+	FG_MAC_CMD_QMAX		= 0x0075,
+	FG_MAC_CMD_RA_TABLE	= 0x40C0,
 };
+
 
 enum {
 	SEAL_STATE_RSVED,
@@ -130,6 +140,7 @@ enum {
 	SEAL_STATE_SEALED,
 	SEAL_STATE_FA,
 };
+
 
 enum bq_fg_device {
 	BQ27Z561,
@@ -149,7 +160,7 @@ struct cold_thermal {
 struct bq_fg_chip {
 	struct device *dev;
 	struct i2c_client *client;
-	struct regmap *regmap;
+	struct regmap    *regmap;
 
 	struct mutex i2c_rw_lock;
 	struct mutex data_lock;
@@ -163,22 +174,22 @@ struct bq_fg_chip {
 	/* status tracking */
 
 	bool batt_fc;
-	bool batt_fd; /* full depleted */
+	bool batt_fd;	/* full depleted */
 
 	bool batt_dsg;
-	bool batt_rca; /* remaining capacity alarm */
+	bool batt_rca;	/* remaining capacity alarm */
 
 	int seal_state; /* 0 - Full Access, 1 - Unsealed, 2 - Sealed */
 	int batt_tte;
 	int batt_soc;
-	int batt_fcc; /* Full charge capacity */
-	int batt_rm; /* Remaining capacity */
-	int batt_dc; /* Design Capacity */
+	int batt_fcc;	/* Full charge capacity */
+	int batt_rm;	/* Remaining capacity */
+	int batt_dc;	/* Design Capacity */
 	int batt_volt;
 	int batt_temp;
 	int batt_curr;
 	int batt_resistance;
-	int batt_cyclecnt; /* cycle count */
+	int batt_cyclecnt;	/* cycle count */
 	int batt_st;
 
 	/* debug */
@@ -188,8 +199,11 @@ struct bq_fg_chip {
 	int fake_soc;
 	int fake_temp;
 	int fake_volt;
+	/* 新增：charge_full自定义覆盖变量 */
+	int custom_charge_full;
+	bool charge_full_override;
 
-	struct delayed_work monitor_work;
+	struct	delayed_work monitor_work;
 	struct power_supply *fg_psy;
 	struct power_supply *usb_psy;
 	struct power_supply *batt_psy;
@@ -206,28 +220,33 @@ struct bq_fg_chip {
 	int batt_recharge_vol;
 
 	/* workaround for debug or other purpose */
-	bool ignore_digest_for_debug;
-	bool old_hw;
+	bool	ignore_digest_for_debug;
+	bool	old_hw;
 
-	int *dec_rate_seq;
-	int dec_rate_len;
+	int	*dec_rate_seq;
+	int	dec_rate_len;
 
 	struct cold_thermal *cold_thermal_seq;
-	int cold_thermal_len;
-	bool update_now;
-	bool fast_mode;
+	int	cold_thermal_len;
+	bool	update_now;
+	bool	fast_mode;
+
+	/* 低电保护状态 */
+	bool	shutdown_latched;	/* 是否已经真正进入低电 */
+	int	last_volt_mv;		/* 上次电压，做迟滞用 */
 };
 
-#define bq_dbg(reason, fmt, ...)                      \
-	do {                                          \
-		if (debug_mask & (reason))            \
-			pr_info(fmt, ##__VA_ARGS__);  \
-		else                                  \
-			pr_debug(fmt, ##__VA_ARGS__); \
+#define bq_dbg(reason, fmt, ...)			\
+	do {						\
+		if (debug_mask & (reason))		\
+			pr_info(fmt, ##__VA_ARGS__);	\
+		else					\
+			pr_debug(fmt, ##__VA_ARGS__);	\
 	} while (0)
 
-static int bq_battery_soc_smooth_tracking(struct bq_fg_chip *chip, int raw_soc,
-					  int soc, int temp, int curr);
+static int fg_read_volt(struct bq_fg_chip *bq);
+static int bq_battery_soc_smooth_tracking(struct bq_fg_chip *chip,
+		int raw_soc, int soc, int temp, int curr);
 static int fg_get_raw_soc(struct bq_fg_chip *bq);
 static int fg_read_current(struct bq_fg_chip *bq, int *curr);
 static int fg_read_temperature(struct bq_fg_chip *bq);
@@ -255,9 +274,8 @@ static int __fg_write_byte(struct i2c_client *client, u8 reg, u8 val)
 
 	ret = i2c_smbus_write_byte_data(client, reg, val);
 	if (ret < 0) {
-		bq_dbg(PR_REGISTER,
-		       "i2c write byte fail: can't write 0x%02X to reg 0x%02X\n",
-		       val, reg);
+		bq_dbg(PR_REGISTER, "i2c write byte fail: can't write 0x%02X to reg 0x%02X\n",
+				val, reg);
 		return ret;
 	}
 
@@ -270,8 +288,7 @@ static int __fg_read_word(struct i2c_client *client, u8 reg, u16 *val)
 
 	ret = i2c_smbus_read_word_data(client, reg);
 	if (ret < 0) {
-		bq_dbg(PR_REGISTER,
-		       "i2c read word fail: can't read from reg 0x%02X\n", reg);
+		bq_dbg(PR_REGISTER, "i2c read word fail: can't read from reg 0x%02X\n", reg);
 		return ret;
 	}
 
@@ -282,18 +299,20 @@ static int __fg_read_word(struct i2c_client *client, u8 reg, u16 *val)
 
 static int __fg_read_block(struct i2c_client *client, u8 reg, u8 *buf, u8 len)
 {
+
 	int ret;
 	int i;
 
 	for (i = 0; i < len; i++) {
 		ret = i2c_smbus_read_byte_data(client, reg + i);
 		if (ret < 0) {
-			bq_dbg(PR_REGISTER, "i2c read reg 0x%02X faild\n",
-			       reg + i);
+			bq_dbg(PR_REGISTER, "i2c read reg 0x%02X faild\n", reg + i);
 			return ret;
 		}
 		buf[i] = ret;
 	}
+
+
 
 	return ret;
 }
@@ -306,8 +325,7 @@ static int __fg_write_block(struct i2c_client *client, u8 reg, u8 *buf, u8 len)
 	for (i = 0; i < len; i++) {
 		ret = i2c_smbus_write_byte_data(client, reg + i, buf[i]);
 		if (ret < 0) {
-			bq_dbg(PR_REGISTER, "i2c read reg 0x%02X faild\n",
-			       reg + i);
+			bq_dbg(PR_REGISTER, "i2c read reg 0x%02X faild\n", reg + i);
 			return ret;
 		}
 	}
@@ -374,6 +392,7 @@ static int fg_read_block(struct bq_fg_chip *bq, u8 reg, u8 *buf, u8 len)
 	mutex_unlock(&bq->i2c_rw_lock);
 
 	return ret;
+
 }
 
 static int fg_write_block(struct bq_fg_chip *bq, u8 reg, u8 *data, u8 len)
@@ -420,7 +439,7 @@ static void fg_print_buf(const char *msg, u8 *buf, u8 len)
 }
 
 #if 0
-#define TIMEOUT_INIT_COMPLETED 100
+#define TIMEOUT_INIT_COMPLETED	100
 static int fg_check_init_completed(struct bq_fg_chip *bq)
 {
 	int ret;
@@ -486,7 +505,7 @@ static int fg_unseal_send_key(struct bq_fg_chip *bq, int key)
 	return 0;
 }
 
-#define FG_DEFAULT_UNSEAL_KEY 0x80008000
+#define FG_DEFAULT_UNSEAL_KEY	0x80008000
 static int fg_unseal(struct bq_fg_chip *bq)
 {
 	int ret;
@@ -507,7 +526,7 @@ static int fg_unseal(struct bq_fg_chip *bq)
 	return -EPERM;
 }
 
-#define FG_DEFAULT_UNSEAL_FA_KEY 0x36724614
+#define FG_DEFAULT_UNSEAL_FA_KEY	0x36724614
 static int fg_unseal_full_access(struct bq_fg_chip *bq)
 {
 	int ret;
@@ -554,6 +573,7 @@ static int fg_seal(struct bq_fg_chip *bq)
 }
 #endif
 
+
 static int fg_mac_read_block(struct bq_fg_chip *bq, u16 cmd, u8 *buf, u8 len)
 {
 	int ret;
@@ -584,7 +604,7 @@ static int fg_mac_read_block(struct bq_fg_chip *bq, u16 cmd, u8 *buf, u8 len)
 		return 1;
 
 	for (i = 0; i < len; i++)
-		buf[i] = t_buf[i + 2];
+		buf[i] = t_buf[i+2];
 
 	return 0;
 }
@@ -609,8 +629,7 @@ static int fg_sha256_auth(struct bq_fg_chip *bq, u8 *rand_num, int length)
 	*/
 	msleep(2);
 
-	ret = fg_write_block(bq, bq->regs[BQ_FG_REG_MAC_DATA], rand_num,
-			     length);
+	ret = fg_write_block(bq, bq->regs[BQ_FG_REG_MAC_DATA], rand_num, length);
 	if (ret < 0)
 		return ret;
 
@@ -627,8 +646,7 @@ static int fg_sha256_auth(struct bq_fg_chip *bq, u8 *rand_num, int length)
 
 	msleep(300);
 
-	ret = fg_read_block(bq, bq->regs[BQ_FG_REG_MAC_DATA], bq->digest,
-			    length);
+	ret = fg_read_block(bq, bq->regs[BQ_FG_REG_MAC_DATA], bq->digest, length);
 	if (ret < 0)
 		return ret;
 
@@ -648,7 +666,7 @@ static int fg_mac_write_block(struct bq_fg_chip *bq, u16 cmd, u8 *data, u8 len)
 	t_buf[0] = (u8)cmd;
 	t_buf[1] = (u8)(cmd >> 8);
 	for (i = 0; i < len; i++)
-		t_buf[i + 2] = data[i];
+		t_buf[i+2] = data[i];
 
 	cksum = checksum(data, len + 2);
 	/*write command/addr, data*/
@@ -689,16 +707,13 @@ static int fg_set_fastcharge_mode(struct bq_fg_chip *bq, bool enable)
 	if (enable) {
 		ret = fg_mac_write_block(bq, FG_MAC_CMD_FASTCHARGE_EN, data, 2);
 		if (ret < 0) {
-			bq_dbg(PR_OEM, "could not write fastcharge = %d\n",
-			       ret);
+			bq_dbg(PR_OEM, "could not write fastcharge = %d\n", ret);
 			return ret;
 		}
 	} else {
-		ret = fg_mac_write_block(bq, FG_MAC_CMD_FASTCHARGE_DIS, data,
-					 2);
+		ret = fg_mac_write_block(bq, FG_MAC_CMD_FASTCHARGE_DIS, data, 2);
 		if (ret < 0) {
-			bq_dbg(PR_OEM, "could not write fastcharge = %d\n",
-			       ret);
+			bq_dbg(PR_OEM, "could not write fastcharge = %d\n", ret);
 			return ret;
 		}
 	}
@@ -716,30 +731,30 @@ static int fg_read_status(struct bq_fg_chip *bq)
 	if (ret < 0)
 		return ret;
 
-	bq->batt_fc = !!(flags & FG_FLAGS_FC);
-	bq->batt_fd = !!(flags & FG_FLAGS_FD);
-	bq->batt_rca = !!(flags & FG_FLAGS_RCA);
-	bq->batt_dsg = !!(flags & FG_FLAGS_DSG);
+	bq->batt_fc		= !!(flags & FG_FLAGS_FC);
+	bq->batt_fd		= !!(flags & FG_FLAGS_FD);
+	bq->batt_rca		= !!(flags & FG_FLAGS_RCA);
+	bq->batt_dsg		= !!(flags & FG_FLAGS_DSG);
 
 	return 0;
 }
 
-#define TERMINATION 0
-#define TERMINATION_BYTE 6
-#define TERMINATION_BASE 30
-#define TERMINATION_STEP 5
+#define TERMINATION		0
+#define TERMINATION_BYTE	6
+#define TERMINATION_BASE	30
+#define TERMINATION_STEP	5
 
-#define RECHARGE_VOL 1
-#define RECHARGE_VOL_BYTE 7
-#define RECHARGE_VOL_BASE 4200
-#define RECHARGE_VOL_STEP 5
+#define RECHARGE_VOL		1
+#define RECHARGE_VOL_BYTE	7
+#define RECHARGE_VOL_BASE	4200
+#define RECHARGE_VOL_STEP	5
 
-#define FFC_TERMINATION 2
-#define FFC_TERMINATION_BYTE 8
-#define FFC_TERMINATION_BASE 400
-#define FFC_TERMINATION_STEP 20
+#define FFC_TERMINATION		2
+#define FFC_TERMINATION_BYTE	8
+#define FFC_TERMINATION_BASE	400
+#define FFC_TERMINATION_STEP	20
 
-#define MANU_DATA_LEN 3
+#define MANU_DATA_LEN		3
 
 struct manu_data {
 	int byte;
@@ -749,9 +764,9 @@ struct manu_data {
 };
 
 struct manu_data manu_info[MANU_DATA_LEN] = {
-	{ TERMINATION_BYTE, TERMINATION_BASE, TERMINATION_STEP },
-	{ RECHARGE_VOL_BYTE, RECHARGE_VOL_BASE, RECHARGE_VOL_STEP },
-	{ FFC_TERMINATION_BYTE, FFC_TERMINATION_BASE, FFC_TERMINATION_STEP },
+	{TERMINATION_BYTE, TERMINATION_BASE, TERMINATION_STEP},
+	{RECHARGE_VOL_BYTE, RECHARGE_VOL_BASE, RECHARGE_VOL_STEP},
+	{FFC_TERMINATION_BYTE, FFC_TERMINATION_BASE, FFC_TERMINATION_STEP},
 };
 
 static int fg_get_manu_info(unsigned char val, int base, int step)
@@ -822,20 +837,54 @@ static int fg_read_rsoc(struct bq_fg_chip *bq)
 	return soc;
 }
 
-#define FG_REPORT_FULL_SOC 9600
-#define FG_OPTIMIZ_FULL_TIME 40
+#define FG_REPORT_FULL_SOC	9600
+#define FG_OPTIMIZ_FULL_TIME	40
 
 static int fg_read_system_soc(struct bq_fg_chip *bq)
 {
-	int soc, curr, temp, raw_soc;
+	int soc, curr, temp, raw_soc, volt;
 
-	soc = fg_read_rsoc(bq);
+	/* 调试用的 fake_soc 不参与钳制 */
+	if (bq->fake_soc > 0)
+		return bq->fake_soc;
+
+	soc     = fg_read_rsoc(bq);
 	raw_soc = fg_get_raw_soc(bq);
 
 	fg_read_current(bq, &curr);
 	temp = fg_read_temperature(bq);
 
 	soc = bq_battery_soc_smooth_tracking(bq, raw_soc, soc, temp, curr);
+
+	/*
+	 * 低电保护核心逻辑：
+	 * - 电压 <= 3.4V         -> 真正低电，soc 归 0，允许关机
+	 * - 电压 > 3.4V + 迟滞   -> 解除低电锁存
+	 * - soc < 15% 且未锁存    -> 强制显示 15%
+	 * - 其他                  -> 原样上报
+	 */
+	volt = fg_read_volt(bq);
+	bq->last_volt_mv = volt;
+
+	if (volt > 0 && volt <= FG_SHUTDOWN_VOLT_MV) {
+		if (!bq->shutdown_latched)
+			bq_dbg(PR_OEM, "batt real low: %dmV <= %dmV, force SOC 0\n",
+				volt, FG_SHUTDOWN_VOLT_MV);
+		bq->shutdown_latched = true;
+		return 0;
+	}
+
+	if (bq->shutdown_latched &&
+	    volt >= FG_SHUTDOWN_VOLT_MV + FG_LOW_VOLT_HYST_MV) {
+		bq_dbg(PR_OEM, "batt recovered: %dmV, release low latch\n", volt);
+		bq->shutdown_latched = false;
+	}
+
+	if (!bq->shutdown_latched && soc < FG_MIN_SOC_REPORT) {
+		bq_dbg(PR_OEM, "soc %d%% < %d%%, volt=%dmV, clamp to %d%%\n",
+			soc, FG_MIN_SOC_REPORT, volt, FG_MIN_SOC_REPORT);
+		return FG_MIN_SOC_REPORT;
+	}
 
 	return soc;
 }
@@ -859,6 +908,7 @@ static int fg_read_temperature(struct bq_fg_chip *bq)
 	last_temp = temp - 2730;
 
 	return temp - 2730;
+
 }
 
 static int fg_read_volt(struct bq_fg_chip *bq)
@@ -999,7 +1049,7 @@ static int fg_read_tte(struct bq_fg_chip *bq)
 
 	if (bq->regs[BQ_FG_REG_TTE] == INVALID_REG_ADDR) {
 		bq_dbg(PR_OEM, "Time To Empty not supported!\n");
-		return -EPERM;
+		return -ENODATA;
 	}
 
 	ret = fg_read_word(bq, bq->regs[BQ_FG_REG_TTE], &tte);
@@ -1063,6 +1113,7 @@ static int fg_read_charging_voltage(struct bq_fg_chip *bq)
 
 static int fg_get_batt_status(struct bq_fg_chip *bq)
 {
+
 	fg_read_status(bq);
 
 	if (bq->batt_fc)
@@ -1073,10 +1124,21 @@ static int fg_get_batt_status(struct bq_fg_chip *bq)
 		return POWER_SUPPLY_STATUS_CHARGING;
 	else
 		return POWER_SUPPLY_STATUS_NOT_CHARGING;
+
 }
+
 
 static int fg_get_batt_capacity_level(struct bq_fg_chip *bq)
 {
+	int volt = fg_read_volt(bq);
+
+	/* 电压还高于关机阈值，就绝不报 LOW / CRITICAL */
+	if (volt > FG_SHUTDOWN_VOLT_MV) {
+		if (bq->batt_fc)
+			return POWER_SUPPLY_CAPACITY_LEVEL_FULL;
+		return POWER_SUPPLY_CAPACITY_LEVEL_NORMAL;
+	}
+
 	if (bq->batt_fc)
 		return POWER_SUPPLY_CAPACITY_LEVEL_FULL;
 	else if (bq->batt_rca)
@@ -1123,9 +1185,7 @@ static int fg_get_soc_decimal(struct bq_fg_chip *bq)
 
 static int fg_get_cold_thermal_level(struct bq_fg_chip *bq)
 {
-	union power_supply_propval pval = {
-		0,
-	};
+	union power_supply_propval pval = {0, };
 	int curr, i, rc, temp, volt, status;
 
 	if (!bq)
@@ -1141,16 +1201,16 @@ static int fg_get_cold_thermal_level(struct bq_fg_chip *bq)
 		}
 	}
 
-	rc = power_supply_get_property(bq->batt_psy, POWER_SUPPLY_PROP_STATUS,
-				       &pval);
+	rc = power_supply_get_property(bq->batt_psy,
+		POWER_SUPPLY_PROP_STATUS, &pval);
 	if (rc < 0) {
 		bq_dbg(PR_OEM, "failed get batt staus\n");
 		return -EINVAL;
 	}
 	status = pval.intval;
 
-	rc = power_supply_get_property(bq->batt_psy, POWER_SUPPLY_PROP_TEMP,
-				       &pval);
+	rc = power_supply_get_property(bq->batt_psy,
+		POWER_SUPPLY_PROP_TEMP, &pval);
 	if (rc < 0) {
 		bq_dbg(PR_OEM, "failed get batt temp\n");
 		return -EINVAL;
@@ -1158,29 +1218,28 @@ static int fg_get_cold_thermal_level(struct bq_fg_chip *bq)
 	temp = pval.intval;
 
 	rc = power_supply_get_property(bq->batt_psy,
-				       POWER_SUPPLY_PROP_VOLTAGE_NOW, &pval);
+		POWER_SUPPLY_PROP_VOLTAGE_NOW, &pval);
 	if (rc < 0) {
 		bq_dbg(PR_OEM, "failed get batt temp\n");
 		return -EINVAL;
 	}
 	volt = pval.intval;
 
-	if (status == POWER_SUPPLY_STATUS_CHARGING || temp > 100 ||
-	    volt > 3500000)
+
+	if (status == POWER_SUPPLY_STATUS_CHARGING ||
+			temp > 100 || volt > 3500000)
 		return 0;
 
 	fg_read_avg_current(bq, &curr);
 
 	for (i = 0; i < bq->cold_thermal_len; i++) {
 		if (temp > bq->cold_thermal_seq[i].temp_l &&
-		    temp <= bq->cold_thermal_seq[i].temp_h &&
-		    curr > bq->cold_thermal_seq[i].curr_th) {
-			bq_dbg(PR_OEM,
-			       "cold thermal trigger status:%d, temp:%d, volt:%d\n",
-			       status, temp, volt);
-			bq_dbg(PR_OEM,
-			       "curr:%d, bq->cold_thermal_seq[i].index:%d\n",
-			       curr, bq->cold_thermal_seq[i].index);
+				temp <= bq->cold_thermal_seq[i].temp_h &&
+				curr > bq->cold_thermal_seq[i].curr_th) {
+			bq_dbg(PR_OEM, "cold thermal trigger status:%d, temp:%d, volt:%d\n",
+					status, temp, volt);
+			bq_dbg(PR_OEM, "curr:%d, bq->cold_thermal_seq[i].index:%d\n", curr,
+					bq->cold_thermal_seq[i].index);
 			return bq->cold_thermal_seq[i].index;
 		}
 	}
@@ -1198,7 +1257,7 @@ static enum power_supply_property fg_props[] = {
 	POWER_SUPPLY_PROP_SOC_DECIMAL_RATE,
 	POWER_SUPPLY_PROP_COLD_THERMAL_LEVEL,
 	POWER_SUPPLY_PROP_TEMP,
-	/*POWER_SUPPLY_PROP_HEALTH,*/ /*implement it in battery power_supply*/
+	/*POWER_SUPPLY_PROP_HEALTH,*//*implement it in battery power_supply*/
 	POWER_SUPPLY_PROP_CHARGE_FULL,
 	POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
 	POWER_SUPPLY_PROP_CYCLE_COUNT,
@@ -1218,9 +1277,8 @@ static enum power_supply_property fg_props[] = {
 	POWER_SUPPLY_PROP_MODEL_NAME,
 };
 
-static int fg_get_property(struct power_supply *psy,
-			   enum power_supply_property psp,
-			   union power_supply_propval *val)
+static int fg_get_property(struct power_supply *psy, enum power_supply_property psp,
+					union power_supply_propval *val)
 {
 	struct bq_fg_chip *bq = power_supply_get_drvdata(psy);
 	int ret;
@@ -1309,6 +1367,11 @@ static int fg_get_property(struct power_supply *psy,
 		break;
 
 	case POWER_SUPPLY_PROP_CHARGE_FULL:
+	        /* 新增：优先读取自定义容量 */
+	        if (bq->charge_full_override) {
+			val->intval = bq->custom_charge_full;
+			break;
+		}
 		if (bq->old_hw) {
 			val->intval = 4050000;
 			break;
@@ -1352,20 +1415,15 @@ static int fg_get_property(struct power_supply *psy,
 			break;
 		}
 		val->intval = fg_read_charging_current(bq);
-		if (bq->verify_digest_success == false &&
-		    !bq->ignore_digest_for_debug) {
+		if (bq->verify_digest_success == false
+				&& !bq->ignore_digest_for_debug) {
 			val->intval = min(val->intval, 2000);
 		}
 		val->intval *= 1000;
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
-		if (bq->old_hw) {
-			val->intval = 4450000;
+			val->intval = 4400000;
 			break;
-		}
-		val->intval = fg_read_charging_voltage(bq);
-		val->intval *= 1000;
-		break;
 	case POWER_SUPPLY_PROP_AUTHENTIC:
 		val->intval = bq->verify_digest_success;
 		break;
@@ -1408,8 +1466,8 @@ static int fg_get_property(struct power_supply *psy,
 }
 
 static int fg_set_property(struct power_supply *psy,
-			   enum power_supply_property prop,
-			   const union power_supply_propval *val)
+			       enum power_supply_property prop,
+			       const union power_supply_propval *val)
 {
 	struct bq_fg_chip *bq = power_supply_get_drvdata(psy);
 
@@ -1435,6 +1493,14 @@ static int fg_set_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
 		bq->fake_volt = val->intval;
 		break;
+	/* 新增 charge_full 写入分支 */
+	case POWER_SUPPLY_PROP_CHARGE_FULL:
+		if (val->intval >= 1000000 && val->intval <= 20000000) {
+			bq->custom_charge_full = val->intval;
+			bq->charge_full_override = true;
+			power_supply_changed(bq->fg_psy);
+		}
+		break;	
 	default:
 		return -EINVAL;
 	}
@@ -1442,8 +1508,9 @@ static int fg_set_property(struct power_supply *psy,
 	return 0;
 }
 
+
 static int fg_prop_is_writeable(struct power_supply *psy,
-				enum power_supply_property prop)
+				       enum power_supply_property prop)
 {
 	int ret;
 
@@ -1455,6 +1522,8 @@ static int fg_prop_is_writeable(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_FASTCHARGE_MODE:
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX:
+	/* 标记charge_full可写 */
+	case POWER_SUPPLY_PROP_CHARGE_FULL:
 		ret = 1;
 		break;
 	default:
@@ -1463,6 +1532,8 @@ static int fg_prop_is_writeable(struct power_supply *psy,
 	}
 	return ret;
 }
+
+
 
 static int fg_psy_register(struct bq_fg_chip *bq)
 {
@@ -1478,8 +1549,9 @@ static int fg_psy_register(struct bq_fg_chip *bq)
 
 	fg_psy_cfg.drv_data = bq;
 	fg_psy_cfg.num_supplicants = 0;
-	bq->fg_psy =
-		devm_power_supply_register(bq->dev, &bq->fg_psy_d, &fg_psy_cfg);
+	bq->fg_psy = devm_power_supply_register(bq->dev,
+						&bq->fg_psy_d,
+						&fg_psy_cfg);
 	if (IS_ERR(bq->fg_psy)) {
 		bq_dbg(PR_OEM, "Failed to register fg_psy");
 		return PTR_ERR(bq->fg_psy);
@@ -1488,18 +1560,24 @@ static int fg_psy_register(struct bq_fg_chip *bq)
 	return 0;
 }
 
+
 static void fg_psy_unregister(struct bq_fg_chip *bq)
 {
+
 	power_supply_unregister(bq->fg_psy);
 }
 
 static const u8 fg_dump_regs[] = {
-	0x00, 0x02, 0x04, 0x06, 0x08, 0x0A, 0x0C, 0x0E, 0x10, 0x16, 0x18, 0x1A,
-	0x1C, 0x1E, 0x20, 0x28, 0x2A, 0x2C, 0x2E, 0x30, 0x66, 0x68, 0x6C, 0x6E,
+	0x00, 0x02, 0x04, 0x06,
+	0x08, 0x0A, 0x0C, 0x0E,
+	0x10, 0x16, 0x18, 0x1A,
+	0x1C, 0x1E, 0x20, 0x28,
+	0x2A, 0x2C, 0x2E, 0x30,
+	0x66, 0x68, 0x6C, 0x6E,
 };
 
 static ssize_t fg_attr_show_Ra_table(struct device *dev,
-				     struct device_attribute *attr, char *buf)
+				struct device_attribute *attr, char *buf)
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct bq_fg_chip *bq = i2c_get_clientdata(client);
@@ -1520,8 +1598,7 @@ static ssize_t fg_attr_show_Ra_table(struct device *dev,
 	memcpy(&buf[idx], temp_buf, len);
 	idx += len;
 	for (i = 1; i < 16; i++) {
-		len = sprintf(temp_buf, "%d ",
-			      t_buf[i * 2] << 8 | t_buf[i * 2 + 1]);
+		len = sprintf(temp_buf, "%d ", t_buf[i*2] << 8 | t_buf[i*2 + 1]);
 		memcpy(&buf[idx], temp_buf, len);
 		idx += len;
 	}
@@ -1530,7 +1607,7 @@ static ssize_t fg_attr_show_Ra_table(struct device *dev,
 }
 
 static ssize_t fg_attr_show_Qmax(struct device *dev,
-				 struct device_attribute *attr, char *buf)
+				struct device_attribute *attr, char *buf)
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct bq_fg_chip *bq = i2c_get_clientdata(client);
@@ -1550,7 +1627,7 @@ static ssize_t fg_attr_show_Qmax(struct device *dev,
 }
 
 static ssize_t fg_attr_show_fcc_soh(struct device *dev,
-				    struct device_attribute *attr, char *buf)
+				struct device_attribute *attr, char *buf)
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct bq_fg_chip *bq = i2c_get_clientdata(client);
@@ -1570,7 +1647,7 @@ static ssize_t fg_attr_show_fcc_soh(struct device *dev,
 }
 
 static ssize_t fg_attr_show_rm(struct device *dev,
-			       struct device_attribute *attr, char *buf)
+				struct device_attribute *attr, char *buf)
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct bq_fg_chip *bq = i2c_get_clientdata(client);
@@ -1609,7 +1686,8 @@ static ssize_t fg_attr_show_soh(struct device *dev,
 }
 
 static ssize_t verify_digest_show(struct device *dev,
-				  struct device_attribute *attr, char *buf)
+		struct device_attribute *attr,
+		char *buf)
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct bq_fg_chip *bq = i2c_get_clientdata(client);
@@ -1619,8 +1697,7 @@ static ssize_t verify_digest_show(struct device *dev,
 
 	for (i = 0; i < BATTERY_DIGEST_LEN; i++) {
 		memset(digest_buf, 0, sizeof(digest_buf));
-		snprintf(digest_buf, sizeof(digest_buf) - 1, "%02x",
-			 bq->digest[i]);
+		snprintf(digest_buf, sizeof(digest_buf) - 1, "%02x", bq->digest[i]);
 		strlcat(buf, digest_buf, BATTERY_DIGEST_LEN * 2 + 1);
 	}
 	len = strlen(buf);
@@ -1635,36 +1712,31 @@ int StringToHex(char *str, unsigned char *out, unsigned int *outlen)
 	char high = 0, low = 0;
 	int tmplen = strlen(p), cnt = 0;
 	tmplen = strlen(p);
-	while (cnt < (tmplen / 2)) {
-		high = ((*p > '9') && ((*p <= 'F') || (*p <= 'f'))) ?
-			       *p - 48 - 7 :
-			       *p - 48;
-		low = (*(++p) > '9' && ((*p <= 'F') || (*p <= 'f'))) ?
-			      *(p)-48 - 7 :
-			      *(p)-48;
+	while(cnt < (tmplen / 2))
+	{
+		high = ((*p > '9') && ((*p <= 'F') || (*p <= 'f'))) ? *p - 48 - 7 : *p - 48;
+		low = (*(++ p) > '9' && ((*p <= 'F') || (*p <= 'f'))) ? *(p) - 48 - 7 : *(p) - 48;
 		out[cnt] = ((high & 0x0f) << 4 | (low & 0x0f));
-		p++;
-		cnt++;
+		p ++;
+		cnt ++;
 	}
-	if (tmplen % 2 != 0)
-		out[cnt] = ((*p > '9') && ((*p <= 'F') || (*p <= 'f'))) ?
-				   *p - 48 - 7 :
-				   *p - 48;
+	if (tmplen % 2 != 0) out[cnt] = ((*p > '9') && ((*p <= 'F') || (*p <= 'f'))) ? *p - 48 - 7 : *p - 48;
 
-	if (outlen != NULL)
-		*outlen = tmplen / 2 + tmplen % 2;
+	if (outlen != NULL) *outlen = tmplen / 2 + tmplen % 2;
 
 	return tmplen / 2 + tmplen % 2;
 }
 
-ssize_t verify_digest_store(struct device *dev, struct device_attribute *attr,
-			    const char *buf, size_t count)
+ssize_t verify_digest_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf,
+		size_t count)
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct bq_fg_chip *bq = i2c_get_clientdata(client);
 	int i;
-	u8 random[32] = { 0 };
-	char kbuf[70] = { 0 };
+	u8 random[32] = {0};
+	char kbuf[70] = {0};
 
 	memset(kbuf, 0, sizeof(kbuf));
 	strncpy(kbuf, buf, count - 1);
@@ -1676,7 +1748,7 @@ ssize_t verify_digest_store(struct device *dev, struct device_attribute *attr,
 }
 
 static ssize_t fg_attr_show_TRemQ(struct device *dev,
-				  struct device_attribute *attr, char *buf)
+				struct device_attribute *attr, char *buf)
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct bq_fg_chip *bq = i2c_get_clientdata(client);
@@ -1690,13 +1762,14 @@ static ssize_t fg_attr_show_TRemQ(struct device *dev,
 	if (ret < 0)
 		return 0;
 
-	len = snprintf(buf, sizeof(t_buf), "%d\n", (t_buf[1] << 8) | t_buf[0]);
+	len = snprintf(buf, sizeof(t_buf), "%d\n",
+			(t_buf[1] << 8) | t_buf[0]);
 
 	return len;
 }
 
 static ssize_t fg_attr_show_TFullChgQ(struct device *dev,
-				      struct device_attribute *attr, char *buf)
+				struct device_attribute *attr, char *buf)
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct bq_fg_chip *bq = i2c_get_clientdata(client);
@@ -1710,13 +1783,14 @@ static ssize_t fg_attr_show_TFullChgQ(struct device *dev,
 	if (ret < 0)
 		return 0;
 
-	len = snprintf(buf, sizeof(t_buf), "%d\n", (t_buf[9] << 8) | t_buf[8]);
+	len = snprintf(buf, sizeof(t_buf), "%d\n",
+			(t_buf[9] << 8) | t_buf[8]);
 
 	return len;
 }
 
 static ssize_t fg_attr_show_TSim(struct device *dev,
-				 struct device_attribute *attr, char *buf)
+				struct device_attribute *attr, char *buf)
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct bq_fg_chip *bq = i2c_get_clientdata(client);
@@ -1731,13 +1805,13 @@ static ssize_t fg_attr_show_TSim(struct device *dev,
 		return 0;
 
 	len = snprintf(buf, sizeof(t_buf), "%d\n",
-		       (t_buf[13] << 8) | t_buf[12]);
+			(t_buf[13] << 8) | t_buf[12]);
 
 	return len;
 }
 
 static ssize_t fg_attr_show_TAmbient(struct device *dev,
-				     struct device_attribute *attr, char *buf)
+				struct device_attribute *attr, char *buf)
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct bq_fg_chip *bq = i2c_get_clientdata(client);
@@ -1752,13 +1826,12 @@ static ssize_t fg_attr_show_TAmbient(struct device *dev,
 		return 0;
 
 	len = snprintf(buf, sizeof(t_buf), "%d\n",
-		       (t_buf[15] << 8) | t_buf[14]);
+			(t_buf[15] << 8) | t_buf[14]);
 
 	return len;
 }
 
-static DEVICE_ATTR(verify_digest, 0660, verify_digest_show,
-		   verify_digest_store);
+static DEVICE_ATTR(verify_digest, 0660, verify_digest_show, verify_digest_store);
 static DEVICE_ATTR(RaTable, S_IRUGO, fg_attr_show_Ra_table, NULL);
 static DEVICE_ATTR(Qmax, S_IRUGO, fg_attr_show_Qmax, NULL);
 static DEVICE_ATTR(fcc_soh, S_IRUGO, fg_attr_show_fcc_soh, NULL);
@@ -1771,17 +1844,24 @@ static DEVICE_ATTR(TSim, S_IRUGO, fg_attr_show_TSim, NULL);
 static DEVICE_ATTR(TAmbient, S_IRUGO, fg_attr_show_TAmbient, NULL);
 
 static struct attribute *fg_attributes[] = {
-	&dev_attr_RaTable.attr,	      &dev_attr_Qmax.attr,
-	&dev_attr_fcc_soh.attr,	      &dev_attr_rm.attr,
-	&dev_attr_fcc.attr,	      &dev_attr_soh.attr,
-	&dev_attr_verify_digest.attr, &dev_attr_TRemQ.attr,
-	&dev_attr_TFullChgQ.attr,     &dev_attr_TSim.attr,
-	&dev_attr_TAmbient.attr,      NULL,
+	&dev_attr_RaTable.attr,
+	&dev_attr_Qmax.attr,
+	&dev_attr_fcc_soh.attr,
+	&dev_attr_rm.attr,
+	&dev_attr_fcc.attr,
+	&dev_attr_soh.attr,
+	&dev_attr_verify_digest.attr,
+	&dev_attr_TRemQ.attr,
+	&dev_attr_TFullChgQ.attr,
+	&dev_attr_TSim.attr,
+	&dev_attr_TAmbient.attr,
+	NULL,
 };
 
 static const struct attribute_group fg_attr_group = {
 	.attrs = fg_attributes,
 };
+
 
 static int fg_dump_registers(struct bq_fg_chip *bq)
 {
@@ -1792,8 +1872,7 @@ static int fg_dump_registers(struct bq_fg_chip *bq)
 	for (i = 0; i < ARRAY_SIZE(fg_dump_regs); i++) {
 		ret = fg_read_word(bq, fg_dump_regs[i], &val);
 		if (!ret)
-			bq_dbg(PR_REGISTER, "Reg[%02X] = 0x%04X\n",
-			       fg_dump_regs[i], val);
+			bq_dbg(PR_REGISTER, "Reg[%02X] = 0x%04X\n", fg_dump_regs[i], val);
 	}
 
 	return ret;
@@ -1817,11 +1896,11 @@ static void fg_update_status(struct bq_fg_chip *bq)
 	mutex_unlock(&bq->data_lock);
 
 	bq_dbg(PR_OEM, "SOC:%d,Volt:%d,Cur:%d,Temp:%d,RM:%d,FC:%d,FAST:%d",
-	       bq->batt_soc, bq->batt_volt, bq->batt_curr, bq->batt_temp, rm,
-	       fcc, bq->fast_mode);
+			bq->batt_soc, bq->batt_volt, bq->batt_curr,
+			bq->batt_temp, rm, fcc, bq->fast_mode);
 
-	if ((last_soc != bq->batt_soc) || (last_temp != bq->batt_temp) ||
-	    (last_st != bq->batt_st)) {
+	if ((last_soc != bq->batt_soc) || (last_temp != bq->batt_temp)
+			|| (last_st != bq->batt_st)) {
 		if (bq->fg_psy)
 			power_supply_changed(bq->fg_psy);
 	}
@@ -1831,6 +1910,7 @@ static void fg_update_status(struct bq_fg_chip *bq)
 	last_st = bq->batt_st;
 }
 
+
 static int fg_get_raw_soc(struct bq_fg_chip *bq)
 {
 	int rm, fcc;
@@ -1838,6 +1918,7 @@ static int fg_get_raw_soc(struct bq_fg_chip *bq)
 
 	rm = fg_read_rm(bq);
 	fcc = fg_read_fcc(bq);
+
 
 	raw_soc = rm * 10000 / fcc;
 
@@ -1858,14 +1939,14 @@ static int calc_delta_time(struct timeval *time_start, int *delta_time)
 	return 0;
 }
 
-#define BATT_HIGH_AVG_CURRENT 1000000
-#define NORMAL_TEMP_CHARGING_DELTA 10
-#define NORMAL_DISTEMP_CHARGING_DELTA 60
-#define LOW_TEMP_CHARGING_DELTA 10
-#define LOW_TEMP_DISCHARGING_DELTA 20
-#define BATT_TEMP_LOW_THRED 150
-#define FFC_SMOOTH_LEN 4
-#define FG_RAW_SOC_FULL 10000
+#define BATT_HIGH_AVG_CURRENT		1000000
+#define NORMAL_TEMP_CHARGING_DELTA	10
+#define NORMAL_DISTEMP_CHARGING_DELTA	60
+#define LOW_TEMP_CHARGING_DELTA		10
+#define LOW_TEMP_DISCHARGING_DELTA	20
+#define BATT_TEMP_LOW_THRED		150
+#define FFC_SMOOTH_LEN			4
+#define FG_RAW_SOC_FULL			10000
 
 struct ffc_smooth {
 	int curr_lim;
@@ -1873,23 +1954,21 @@ struct ffc_smooth {
 };
 
 struct ffc_smooth ffc_dischg_smooth[FFC_SMOOTH_LEN] = {
-	{ 0, 300 },
-	{ 300, 150 },
-	{ 600, 72 },
-	{ 1000, 50 },
+	{0,    300},
+	{300,  150},
+	{600,   72},
+	{1000,  50},
 };
 
-static int bq_battery_soc_smooth_tracking(struct bq_fg_chip *bq, int raw_soc,
-					  int batt_soc, int batt_temp,
-					  int batt_ma)
+static int bq_battery_soc_smooth_tracking(struct bq_fg_chip *bq,
+		int raw_soc, int batt_soc, int batt_temp, int batt_ma)
 {
 	return batt_soc;
 }
 
 static void fg_monitor_workfunc(struct work_struct *work)
 {
-	struct bq_fg_chip *bq =
-		container_of(work, struct bq_fg_chip, monitor_work.work);
+	struct bq_fg_chip *bq = container_of(work, struct bq_fg_chip, monitor_work.work);
 	int rc;
 
 	if (!bq->old_hw) {
@@ -1906,7 +1985,8 @@ static int bq_parse_dt(struct bq_fg_chip *bq)
 	struct device_node *node = bq->dev->of_node;
 	int ret, size;
 
-	ret = of_property_read_u32(node, "bq,charge-full-design", &bq->batt_dc);
+	ret = of_property_read_u32(node, "bq,charge-full-design",
+			&bq->batt_dc);
 	if (ret < 0) {
 		bq_dbg(PR_OEM, "failed to get bq,charge-full-designe\n");
 		bq->batt_dc = DEFUALT_FULL_DESIGN;
@@ -1914,68 +1994,74 @@ static int bq_parse_dt(struct bq_fg_chip *bq)
 	}
 
 	ret = of_property_read_u32(node, "bq,recharge-voltage",
-				   &bq->batt_recharge_vol);
+			&bq->batt_recharge_vol);
 	if (ret < 0) {
 		bq_dbg(PR_OEM, "failed to get bq,recharge-voltage\n");
 		bq->batt_recharge_vol = -EINVAL;
 		return ret;
 	}
 
-	bq->ignore_digest_for_debug =
-		of_property_read_bool(node, "bq,ignore-digest-debug");
+	bq->ignore_digest_for_debug = of_property_read_bool(node,
+				"bq,ignore-digest-debug");
 
 	size = 0;
 	of_get_property(node, "bq,soc_decimal_rate", &size);
 	if (size) {
-		bq->dec_rate_seq = devm_kzalloc(bq->dev, size, GFP_KERNEL);
+		bq->dec_rate_seq = devm_kzalloc(bq->dev,
+				size, GFP_KERNEL);
 		if (bq->dec_rate_seq) {
-			bq->dec_rate_len = (size / sizeof(*bq->dec_rate_seq));
+			bq->dec_rate_len =
+				(size / sizeof(*bq->dec_rate_seq));
 			if (bq->dec_rate_len % 2) {
-				bq_dbg(PR_OEM,
-				       "invalid soc decimal rate seq\n");
+				bq_dbg(PR_OEM, "invalid soc decimal rate seq\n");
 				return -EINVAL;
 			}
-			of_property_read_u32_array(node, "bq,soc_decimal_rate",
-						   bq->dec_rate_seq,
-						   bq->dec_rate_len);
+			of_property_read_u32_array(node,
+					"bq,soc_decimal_rate",
+					bq->dec_rate_seq,
+					bq->dec_rate_len);
 		} else {
-			bq_dbg(PR_OEM,
-			       "error allocating memory for dec_rate_seq\n");
+			bq_dbg(PR_OEM, "error allocating memory for dec_rate_seq\n");
 		}
 	}
 
 	size = 0;
 	of_get_property(node, "bq,cold_thermal_seq", &size);
 	if (size) {
-		bq->cold_thermal_seq = devm_kzalloc(bq->dev, size, GFP_KERNEL);
+		bq->cold_thermal_seq = devm_kzalloc(bq->dev,
+				size, GFP_KERNEL);
 		if (bq->cold_thermal_seq) {
-			bq->cold_thermal_len = (size / sizeof(int));
+			bq->cold_thermal_len =
+				(size / sizeof(int));
 			if (bq->cold_thermal_len % 4) {
 				bq_dbg(PR_OEM, "invalid cold thermal seq\n");
 				return -EINVAL;
 			}
-			of_property_read_u32_array(node, "bq,cold_thermal_seq",
-						   (int *)bq->cold_thermal_seq,
-						   bq->cold_thermal_len);
+			of_property_read_u32_array(node,
+					"bq,cold_thermal_seq",
+					(int *)bq->cold_thermal_seq,
+					bq->cold_thermal_len);
 			bq->cold_thermal_len = bq->cold_thermal_len / 4;
 		} else {
-			bq_dbg(PR_OEM,
-			       "error allocating memory for cold thermal seq\n");
+			bq_dbg(PR_OEM, "error allocating memory for cold thermal seq\n");
 		}
 	}
+
+
 
 	return 0;
 }
 
 static struct regmap_config i2c_bq27z561_regmap_config = {
-	.reg_bits = 8,
-	.val_bits = 8,
-	.max_register = 0xFFFF,
+	.reg_bits  = 8,
+	.val_bits  = 8,
+	.max_register  = 0xFFFF,
 };
 
 static int bq_fg_probe(struct i2c_client *client,
-		       const struct i2c_device_id *id)
+				const struct i2c_device_id *id)
 {
+
 	int ret;
 	struct bq_fg_chip *bq;
 	u8 *regs;
@@ -1989,19 +2075,24 @@ static int bq_fg_probe(struct i2c_client *client,
 	bq->client = client;
 	bq->chip = id->driver_data;
 
-	bq->batt_soc = -ENODATA;
-	bq->batt_fcc = -ENODATA;
-	bq->batt_rm = -ENODATA;
-	bq->batt_dc = -ENODATA;
-	bq->batt_volt = -ENODATA;
-	bq->batt_temp = -ENODATA;
-	bq->batt_curr = -ENODATA;
+	bq->batt_soc	= -ENODATA;
+	bq->batt_fcc	= -ENODATA;
+	bq->batt_rm	= -ENODATA;
+	bq->batt_dc	= -ENODATA;
+	bq->batt_volt	= -ENODATA;
+	bq->batt_temp	= -ENODATA;
+	bq->batt_curr	= -ENODATA;
 	bq->batt_cyclecnt = -ENODATA;
 	bq->batt_tte = -ENODATA;
 
-	bq->fake_soc = -EINVAL;
-	bq->fake_temp = -EINVAL;
-	bq->fake_volt = -EINVAL;
+	bq->fake_soc	= -EINVAL;
+	bq->fake_temp	= -EINVAL;
+	bq->fake_volt	= -EINVAL;
+	/* 自定义容量覆盖变量初始化 */
+	bq->charge_full_override = false;
+	bq->custom_charge_full = 0;
+	bq->shutdown_latched = false;
+	bq->last_volt_mv = 0;
 
 	if (bq->chip == BQ27Z561) {
 		regs = bq27z561_regs;
@@ -2034,13 +2125,14 @@ static int bq_fg_probe(struct i2c_client *client,
 		bq_dbg(PR_OEM, "Failed to register sysfs, err:%d\n", ret);
 
 	INIT_DELAYED_WORK(&bq->monitor_work, fg_monitor_workfunc);
-	schedule_delayed_work(&bq->monitor_work, 10 * HZ);
+	schedule_delayed_work(&bq->monitor_work,10 * HZ);
 
 	bq_dbg(PR_OEM, "bq fuel gauge probe successfully, %s\n",
-	       device2str[bq->chip]);
+			device2str[bq->chip]);
 
 	return 0;
 }
+
 
 static int bq_fg_suspend(struct device *dev)
 {
@@ -2053,7 +2145,7 @@ static int bq_fg_suspend(struct device *dev)
 
 	return 0;
 }
-#define BQ_RESUME_UPDATE_TIME 600
+#define BQ_RESUME_UPDATE_TIME	600
 
 static int bq_fg_resume(struct device *dev)
 {
@@ -2065,7 +2157,7 @@ static int bq_fg_resume(struct device *dev)
 
 	if (delta_time > BQ_RESUME_UPDATE_TIME) {
 		bq_dbg(PR_OEM, "suspend more than %d, update soc now\n",
-		       BQ_RESUME_UPDATE_TIME);
+				BQ_RESUME_UPDATE_TIME);
 		bq->update_now = true;
 	}
 
@@ -2086,6 +2178,7 @@ static int bq_fg_remove(struct i2c_client *client)
 	sysfs_remove_group(&bq->dev->kobj, &fg_attr_group);
 
 	return 0;
+
 }
 
 static void bq_fg_shutdown(struct i2c_client *client)
@@ -2094,9 +2187,7 @@ static void bq_fg_shutdown(struct i2c_client *client)
 }
 
 static struct of_device_id bq_fg_match_table[] = {
-	{
-		.compatible = "ti,bq27z561",
-	},
+	{.compatible = "ti,bq27z561",},
 	{},
 };
 MODULE_DEVICE_TABLE(of, bq_fg_match_table);
@@ -2108,8 +2199,8 @@ static const struct i2c_device_id bq_fg_id[] = {
 MODULE_DEVICE_TABLE(i2c, bq_fg_id);
 
 static const struct dev_pm_ops bq_fg_pm_ops = {
-	.resume = bq_fg_resume,
-	.suspend = bq_fg_suspend,
+	.resume		= bq_fg_resume,
+	.suspend	= bq_fg_suspend,
 };
 
 static struct i2c_driver bq_fg_driver = {
@@ -2132,3 +2223,4 @@ module_i2c_driver(bq_fg_driver);
 MODULE_DESCRIPTION("TI BQ27Z561 Driver");
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR("Texas Instruments");
+
